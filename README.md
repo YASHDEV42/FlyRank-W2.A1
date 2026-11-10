@@ -24,10 +24,14 @@ The server runs at http://localhost:8000.
 | GET | `/` | API info (name, version, endpoints) | 200 | – |
 | GET | `/health` | Health check, returns `{"status": "ok"}` | 200 | – |
 | GET | `/tasks` | List all tasks | 200 | – |
+| GET | `/tasks?done=true\|false` | Only done / only open tasks | 200 | 400 (done not true/false) |
+| GET | `/tasks?search=milk` | Tasks whose title contains the word (case-insensitive); can be combined with `done` | 200 | – |
 | GET | `/tasks/{id}` | Get one task | 200 | 400 (id not an integer), 404 |
 | POST | `/tasks` | Create a task from `{"title": "..."}` | 201 | 400 |
 | PUT | `/tasks/{id}` | Update `title` and/or `done` | 200 | 400, 404 |
 | DELETE | `/tasks/{id}` | Delete a task (empty response body) | 204 | 400 (id not an integer), 404 |
+| GET | `/stats` | Counts: `{"total": n, "done": n, "open": n}` | 200 | – |
+| POST | `/reset` | Restore the 3 example tasks (discards all changes) | 200 | – |
 
 Every error is JSON in the form `{ "error": "<message>" }`, for example `{"error": "Task 99 not found"}`.
 Validation problems (missing or empty title, wrong types, empty body) return **400**, not FastAPI's default 422.

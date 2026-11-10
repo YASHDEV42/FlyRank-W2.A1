@@ -7,12 +7,18 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI(title="Task API", version="1.0", description="A simple in-memory to-do CRUD API.")
 
+
+def example_tasks():
+    # A fresh copy of the 3 starting tasks (used at startup and by /reset)
+    return [
+        {"id": 1, "title": "Learn FastAPI", "done": False},
+        {"id": 2, "title": "Write the README", "done": False},
+        {"id": 3, "title": "Buy milk", "done": True},
+    ]
+
+
 # Our "database": a plain Python list that lives in memory (RAM)
-tasks = [
-    {"id": 1, "title": "Learn FastAPI", "done": False},
-    {"id": 2, "title": "Write the README", "done": False},
-    {"id": 3, "title": "Buy milk", "done": True},
-]
+tasks = example_tasks()
 
 
 # ---------- Models (they also drive the Swagger UI schemas) ----------
@@ -30,6 +36,12 @@ class Task(BaseModel):
     id: int
     title: str
     done: bool
+
+
+class Stats(BaseModel):
+    total: int
+    done: int
+    open: int
 
 
 class Error(BaseModel):
@@ -79,6 +91,7 @@ def validation_error(request: Request, exc: RequestValidationError):
         "value_error": f"{field} {err['msg'].removeprefix('Value error, ')}",
         "string_type": f"{field} must be a string",
         "bool_type": f"{field} must be true or false",
+        "bool_parsing": f"{field} must be true or false",
         "int_parsing": f"{field} must be an integer",
         "json_invalid": "Request body must be valid JSON",
         "model_attributes_type": "Request body must be a JSON object",
@@ -109,10 +122,17 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/tasks", tags=["tasks"], summary="List tasks", description="Return every task.",
-         response_model=list[Task], responses={200: {"description": "All tasks"}})
-def list_tasks():
-    return tasks
+@app.get("/tasks", tags=["tasks"], summary="List tasks",
+         description="Return all tasks, optionally filtered by ?done=true|false and/or ?search=word.",
+         response_model=list[Task], responses={200: {"description": "Matching tasks"}, **BAD_REQUEST})
+def list_tasks(done: bool | None = None, search: str | None = None):
+    result = tasks
+    if done is not None:
+        result = [t for t in result if t["done"] == done]
+    if search:
+        # Case-insensitive "title contains" match
+        result = [t for t in result if search.lower() in t["title"].lower()]
+    return result
 
 
 @app.get("/tasks/{task_id}", tags=["tasks"], summary="Get a task", description="Return one task by its id.",
@@ -150,6 +170,22 @@ def update_task(task_id: int, body: TaskUpdate):
 def delete_task(task_id: int):
     tasks.remove(find_task(task_id))
     return Response(status_code=204)  # 204 = success, empty body
+
+
+@app.get("/stats", tags=["extras"], summary="Task statistics",
+         description="Count of all, done and open tasks.",
+         response_model=Stats, responses={200: {"description": "Task counts"}})
+def stats():
+    done_count = sum(1 for t in tasks if t["done"])
+    return {"total": len(tasks), "done": done_count, "open": len(tasks) - done_count}
+
+
+@app.post("/reset", tags=["extras"], summary="Reset tasks",
+          description="Throw away all changes and restore the 3 example tasks.",
+          response_model=list[Task], responses={200: {"description": "The restored tasks"}})
+def reset():
+    tasks[:] = example_tasks()  # replace the list contents in place
+    return tasks
 
 
 # ---------- Swagger: hide FastAPI's automatic 422 (we return 400 instead) ----------
