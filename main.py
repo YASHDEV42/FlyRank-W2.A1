@@ -1,4 +1,4 @@
-# main.py - a tiny FastAPI app
+# main.py - a tiny to-do Task API built with FastAPI
 from fastapi import FastAPI
 
 app = FastAPI()
@@ -6,5 +6,11 @@ app = FastAPI()
 
 @app.get("/")
 def root():
-    # Say hello so we know the server is running
-    return {"message": "Hello, world!"}
+    # Basic info about the API
+    return {"name": "Task API", "version": "1.0", "endpoints": ["/tasks"]}
+
+
+@app.get("/health")
+def health():
+    # Simple check that the server is alive
+    return {"status": "ok"}
