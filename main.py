@@ -1,8 +1,8 @@
 # main.py - a tiny to-do Task API built with FastAPI
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, StrictStr, field_validator
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, StrictBool, StrictStr, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI()
@@ -44,7 +44,9 @@ def validation_error(request: Request, exc: RequestValidationError):
 
 def clean_title(value):
     # Shared rule: title must be a non-empty string (spaces are trimmed)
-    if value is None or not value.strip():
+    if value is None:
+        raise ValueError("must be a string")
+    if not value.strip():
         raise ValueError("must not be empty")
     return value.strip()
 
@@ -53,6 +55,21 @@ class TaskCreate(BaseModel):
     title: StrictStr  # StrictStr: numbers, lists etc. are rejected
 
     _check_title = field_validator("title")(clean_title)
+
+
+class TaskUpdate(BaseModel):
+    # Both fields are optional: only the ones sent will be changed
+    title: StrictStr | None = None
+    done: StrictBool | None = None  # StrictBool: only true/false allowed
+
+    _check_title = field_validator("title")(clean_title)
+
+    @field_validator("done")
+    def check_done(cls, value):
+        # Runs only if "done" was sent; reject an explicit null
+        if value is None:
+            raise ValueError("must be true or false")
+        return value
 
 
 # ---------- Helpers ----------
@@ -98,3 +115,19 @@ def create_task(body: TaskCreate):
     task = {"id": new_id, "title": body.title, "done": False}
     tasks.append(task)
     return task
+
+
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, body: TaskUpdate):
+    task = find_task(task_id)
+    changes = body.model_dump(exclude_unset=True)  # only fields that were sent
+    if not changes:
+        raise HTTPException(status_code=400, detail="Provide at least one of: title, done")
+    task.update(changes)
+    return task
+
+
+@app.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: int):
+    tasks.remove(find_task(task_id))
+    return Response(status_code=204)  # 204 = success, empty body
